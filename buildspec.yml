@@ -9,33 +9,46 @@ env:
 phases:
   install:
     runtime-versions:
-      nodejs: 12
+      nodejs: 12.2.0
     commands:
       - echo Installing Node.js and npm...
+      - n 12.2.0
       - npm config set registry https://registry.npmjs.org/
 
   pre_build:
     commands:
       - echo Logging in to Docker Registry...
       - echo "$DOCKER_REGISTRY_PASSWORD" | docker login -u "$DOCKER_REGISTRY_USERNAME" --password-stdin "$DOCKER_REGISTRY_URL"
-      - export IMAGE_REPO_NAME="node-aws"
-      - export IMAGE_NAME="$DOCKER_REGISTRY_USERNAME/$IMAGE_REPO_NAME"
-      - echo "export IMAGE_NAME=$IMAGE_NAME" >> /tmp/envfile  # ✅ Fix: Store variables in a temporary file
+      - IMAGE_REPO_NAME="tws-aws-cicd-demo"
+      - IMAGE_NAME="$DOCKER_REGISTRY_USERNAME/$IMAGE_REPO_NAME"
 
   build:
     commands:
-      - source /tmp/envfile  # ✅ Load variables
       - echo Build started on `date`
       - echo Packaging application into a zip file...
-      - zip -r node-todo-app.zip * .[^.]*  # Include all files and directories, including hidden files
+      - zip -r node-todo-app.zip * .[^.]* # Include all files and directories, including hidden files
       - echo Building the Docker image...
       - docker build -t $IMAGE_NAME:latest .
-      - docker images | grep "$IMAGE_NAME"  # ✅ Debugging: Ensure the image exists
 
   post_build:
     commands:
-      - source /tmp/envfile  # ✅ Load variables
       - echo Build completed on `date`
       - echo Pushing the Docker image...
-      - echo "Pushing $IMAGE_NAME:latest to $DOCKER_REGISTRY_URL"
       - docker push $IMAGE_NAME:latest
+      - echo Uploading zip file to S3 root location...
+      - aws s3 cp node-todo-app.zip s3://elasticbeanstalk-ap-south-1-624448302051/node-todo-app/ # Upload zip file to the root of the bucket
+      - echo Writing image definitions file...
+      - printf '{"ImageURI":"%s", "Port":8000}' $IMAGE_NAME:latest > imageDefinitions.json
+      - cat imageDefinitions.json
+
+artifacts:
+  files:
+    - '**/*'
+  base-directory: '.'
+  discard-paths: no
+  exclude-patterns:
+    - 'node_modules/**/*'
+    - '.git/**/*'
+    - '.gitignore'
+    - 'README.md'
+    - 'package-lock.json'
