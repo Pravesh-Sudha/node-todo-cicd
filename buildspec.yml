@@ -19,19 +19,24 @@ phases:
     commands:
       - echo Logging in to Docker Registry...
       - echo "$DOCKER_REGISTRY_PASSWORD" | docker login -u "$DOCKER_REGISTRY_USERNAME" --password-stdin "$DOCKER_REGISTRY_URL"
-      - IMAGE_REPO_NAME="node-aws"
-      - IMAGE_NAME="$DOCKER_REGISTRY_USERNAME/$IMAGE_REPO_NAME"
+      - export IMAGE_REPO_NAME="node-aws"
+      - export IMAGE_NAME="$DOCKER_REGISTRY_USERNAME/$IMAGE_REPO_NAME"
+      - echo "IMAGE_NAME=$IMAGE_NAME" >> $CODEBUILD_ENV_FILE
 
   build:
     commands:
+      - source $CODEBUILD_ENV_FILE
       - echo Build started on `date`
       - echo Packaging application into a zip file...
       - zip -r node-todo-app.zip * .[^.]* # Include all files and directories, including hidden files
       - echo Building the Docker image...
       - docker build -t $IMAGE_NAME:latest .
+      - docker images | grep "$IMAGE_NAME" # Debugging step to check if image exists
 
   post_build:
     commands:
+      - source $CODEBUILD_ENV_FILE
       - echo Build completed on `date`
       - echo Pushing the Docker image...
+      - echo "Pushing $IMAGE_NAME:latest to $DOCKER_REGISTRY_URL"
       - docker push $IMAGE_NAME:latest
